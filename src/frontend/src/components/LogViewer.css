@@ -1,0 +1,144 @@
+.log-viewer-modal {
+    max-width: 700px;
+    max-height: 80vh;
+}
+
+.log-viewer-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+}
+
+.header-actions {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}
+
+.log-viewer-body {
+    padding: 0;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.log-loading,
+.log-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2xl);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.log-empty h3 {
+    margin: var(--space-md) 0 var(--space-sm);
+    color: var(--text-secondary);
+}
+
+.log-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.log-entry {
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-entry.success {
+    border-left: 3px solid var(--success);
+}
+
+.log-entry.error {
+    border-left: 3px solid var(--error);
+}
+
+.log-entry-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.log-entry-header:hover {
+    background: var(--bg-tertiary);
+}
+
+.log-status {
+    flex-shrink: 0;
+}
+
+.log-info {
+    flex: 1;
+}
+
+.log-date {
+    font-weight: 500;
+    margin-bottom: var(--space-xs);
+}
+
+.log-meta {
+    display: flex;
+    gap: var(--space-md);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.log-expand {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.log-details {
+    padding: 0 var(--space-lg) var(--space-lg);
+    padding-left: calc(var(--space-lg) + 34px);
+}
+
+.log-output {
+    margin-bottom: var(--space-md);
+}
+
+.log-output:last-child {
+    margin-bottom: 0;
+}
+
+.log-output-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-xs);
+}
+
+.log-output.error .log-output-label {
+    color: var(--error);
+}
+
+.log-output-content {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: var(--space-md);
+    background: var(--bg-primary);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text-secondary);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.log-output.error .log-output-content {
+    color: var(--error);
+    background: var(--error-bg);
+}

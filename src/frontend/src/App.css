@@ -1,0 +1,34 @@
+.app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content {
+    flex: 1;
+    max-width: 1600px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.app-loading {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    color: var(--text-muted);
+}
+
+.delete-modal {
+    max-width: 400px;
+}
+
+.delete-modal h3 {
+    margin-bottom: var(--space-md);
+    color: var(--error);
+}
+
+.delete-modal p {
+    color: var(--text-secondary);
+}

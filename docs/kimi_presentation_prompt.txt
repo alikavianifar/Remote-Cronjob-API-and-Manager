@@ -1,0 +1,45 @@
+# Kimi AI / Chatbot Prompt for Presentation Generation
+
+**Instruction:** 
+Copy the text below and paste it into Kimi AI (or ChatGPT/Gemini) to generate your presentation slides.
+
+---
+
+**PROMPT START**
+
+I have finished a DevOps project called "Remote Cronjob API & Manager" and I need to create a professional presentation for my "Open Source Systems" course.
+
+Please generate a slide deck structure and content for me.
+
+**Project Details:**
+*   **Name:** Remote Cronjob API & Manager
+*   **Goal:** A modern REST API and React dashboard to manage Linux Cronjobs remotely.
+*   **Problem Solved:** Managing cronjobs via command line (`crontab -e`) is error-prone and lacks visibility. This tool provides a GUI and API.
+
+**Key Features (The Solution):**
+1.  **Cron API:** Secure REST endpoints to Create, Read, Update, Delete jobs.
+2.  **Modern Dashboard:** React-based UI to see Active/Paused status instantly.
+3.  **Period Wizard:** A visual builder to generate complex cron expressions (e.g., `0 2 * * *`) without memorizing syntax.
+4.  **Force Run:** Ability to trigger a job manually before its scheduled time.
+5.  **Log Tracking:** Captures stdout/stderr logs and saves execution history.
+6.  **Auto Test:** Built-in self-test mechanism (API endpoint `/api/test`).
+
+**Technical Stack:**
+*   **Backend:** Node.js, Express.js (REST API), JWT Auth, Winston Logger.
+*   **Frontend:** React, Vite, Lucide Icons, Custom CSS (Dark Theme).
+*   **System:** Linux Crontab integration (Mock mode for Windows dev).
+*   **Database:** JSON-based local storage (No SQL server required).
+
+**Slide Structure Needed:**
+1.  **Title Slide:** Project Name, Student Name, Course Name.
+2.  **Introduction/Problem:** Why `crontab -e` is hard to manage at scale.
+3.  **The Solution:** Overview of Remote Cronjob Manager.
+4.  **Architecture:** high-level diagram explanation (React <-> Node API <-> Linux Crontab).
+5.  **Key Features:** Highlight Period Wizard and Log Tracking.
+6.  **Demo/Screenshots:** (I will add screenshots here).
+7.  **Tech Stack:** detailed list of tools used.
+8.  **Conclusion & Future Work.**
+
+Please write the content for each slide in bullet points, keeping it professional and concise.
+
+**PROMPT END**

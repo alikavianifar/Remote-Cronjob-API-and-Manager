@@ -1,0 +1,62 @@
+{
+  "users": [
+    {
+      "id": "7acba282-bae7-41a5-91cf-d0e9de820fd6",
+      "username": "admin",
+      "password_hash": "$2a$10$2NZ/pGypbBEcLUKsP5c5FuqLptK1kpftZxYlycekZJ1zPcenRKC0m",
+      "role": "admin"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "626a3dc2-0bf5-4579-9629-c8e90b146518",
+      "name": "Demo Job",
+      "expression": "0 0 * * *",
+      "command": "echo Hello from Demo",
+      "description": "",
+      "status": "active",
+      "next_run": "2026-01-20T21:00:00.000Z"
+    },
+    {
+      "id": "b32edb62-5ab5-4de2-a300-0e123a158340",
+      "name": "Video Demo Job",
+      "expression": "0 0 * * *",
+      "command": "echo Video Test",
+      "description": "",
+      "status": "active",
+      "next_run": "2026-01-20T21:00:00.000Z"
+    }
+  ],
+  "job_logs": [
+    {
+      "id": "007469d4-b0a0-410d-b7da-13a67e1979fd",
+      "job_id": "a055efb8-9863-47b7-b965-3322fd3294da",
+      "executed_at": "2026-01-18T21:23:33.718Z",
+      "duration": 1503,
+      "exit_code": 0,
+      "stdout": "Simulated execution of: /opt/scripts/backup.sh\nOutput: Success",
+      "stderr": "",
+      "triggered_by": "manual"
+    },
+    {
+      "id": "2ec265c5-c67e-4b96-8694-a5e7b3552970",
+      "job_id": "ca7196db-f20a-407e-9078-4d4c1cf0aa52",
+      "executed_at": "2026-01-18T21:25:45.463Z",
+      "duration": 1502,
+      "exit_code": 0,
+      "stdout": "Simulated execution of: curl -s http://localhost/health\nOutput: Success",
+      "stderr": "",
+      "triggered_by": "manual"
+    },
+    {
+      "id": "4cfab4f7-85e5-4214-b842-ef084669dc91",
+      "job_id": "626a3dc2-0bf5-4579-9629-c8e90b146518",
+      "executed_at": "2026-01-20T12:23:35.625Z",
+      "duration": 1514,
+      "exit_code": 0,
+      "stdout": "Simulated execution of: echo Hello from Demo\nOutput: Success",
+      "stderr": "",
+      "triggered_by": "manual"
+    }
+  ]
+}

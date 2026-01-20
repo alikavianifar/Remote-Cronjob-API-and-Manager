@@ -1,0 +1,24 @@
+{
+    "projectName": "Remote Cronjob API & Manager",
+    "category": "DevOps Automation",
+    "author": "Student Name",
+    "version": "1.0.0",
+    "description": "A modern REST API and web-based management panel for managing scheduled tasks (Cronjobs) on Linux servers. Provides a secure API layer for crontab operations with a beautiful React dashboard.",
+    "features": [
+        "Cron API - Read and modify crontab via REST endpoints",
+        "Dashboard - Visual interface showing job status, schedules, and errors",
+        "Period Wizard - Convert complex cron expressions to human-readable format",
+        "Force Run - Manual execution of jobs before scheduled time",
+        "Log Tracking - Record stdout/stderr output and execution history",
+        "Auto Control - Automatic status monitoring and error detection",
+        "Auto Test - Self-check mechanism for testing functionality"
+    ],
+    "requirements": {
+        "os": "Ubuntu 22.04 / Linux",
+        "backend": "Node.js 18+",
+        "frontend": "React 18+ with Vite",
+        "database": "SQLite (for logs)"
+    },
+    "repository": "",
+    "license": "MIT"
+}

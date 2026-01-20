@@ -1,0 +1,41 @@
+.job-form-modal {
+    max-width: 520px;
+}
+
+.form-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+}
+
+.form-label-row .form-label {
+    margin-bottom: 0;
+}
+
+.wizard-btn {
+    font-size: 0.875rem;
+    padding: var(--space-xs) var(--space-sm);
+    color: var(--accent-primary);
+}
+
+.wizard-btn:hover {
+    background: var(--accent-glow);
+}
+
+.expression-preview {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--info-bg);
+    border-radius: var(--radius-sm);
+    color: var(--info);
+    font-size: 0.875rem;
+}
+
+textarea {
+    min-height: 80px;
+    resize: vertical;
+}
