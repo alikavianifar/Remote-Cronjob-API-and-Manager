@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Calendar, Clock } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { utilAPI } from '../services/api';
 import './PeriodWizard.css';
 
@@ -43,7 +44,7 @@ const DAYS = [
     { label: 'Every day', value: '*' },
     { label: '1st of month', value: '1' },
     { label: '15th of month', value: '15' },
-    { label: 'Last day', value: 'L' },
+    { label: '28th of month', value: '28' },
 ];
 
 const MONTHS = [
@@ -62,76 +63,77 @@ const WEEKDAYS = [
     { label: 'Sunday', value: '0' },
 ];
 
+const PART_NAMES = ['minute', 'hour', 'day', 'month', 'weekday'];
+
+function splitExpression(expression) {
+    const fields = expression.trim().split(/\s+/);
+    if (fields.length !== 5) return null;
+    return Object.fromEntries(PART_NAMES.map((name, i) => [name, fields[i]]));
+}
+
+const joinParts = (parts) => PART_NAMES.map((name) => parts[name]).join(' ');
+
+/** A select only shows values it has options for, so unknown values (typed by hand) get their own option. */
+function withCurrent(options, current) {
+    return options.some((o) => o.value === current) ? options : [{ label: `Current (${current})`, value: current }, ...options];
+}
+
+function PartSelect({ label, options, value, onChange }) {
+    const id = `wizard-${label.replace(/\s+/g, '-').toLowerCase()}`;
+    return (
+        <div className="builder-row">
+            <label htmlFor={id}>{label}</label>
+            <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+                {withCurrent(options, value).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                    </option>
+                ))}
+            </select>
+        </div>
+    );
+}
+
 export default function PeriodWizard({ initialExpression, onSelect, onClose }) {
     const [mode, setMode] = useState('presets'); // 'presets' or 'custom'
-    const [expression, setExpression] = useState(initialExpression || '* * * * *');
-    const [parts, setParts] = useState({
-        minute: '*',
-        hour: '*',
-        day: '*',
-        month: '*',
-        weekday: '*'
-    });
-    const [humanReadable, setHumanReadable] = useState('');
+    const [parts, setParts] = useState(() => splitExpression(initialExpression || '') || splitExpression('* * * * *'));
+    const [preview, setPreview] = useState({ human: '', valid: true });
 
+    const expression = joinParts(parts);
+
+    useEscapeKey(onClose);
+
+    // Describe the current expression; debounced, and stale answers are discarded.
     useEffect(() => {
-        // Parse initial expression
-        const exprParts = expression.split(' ');
-        if (exprParts.length === 5) {
-            setParts({
-                minute: exprParts[0],
-                hour: exprParts[1],
-                day: exprParts[2],
-                month: exprParts[3],
-                weekday: exprParts[4]
-            });
-        }
-    }, []);
-
-    useEffect(() => {
-        // Update expression when parts change
-        const newExpr = `${parts.minute} ${parts.hour} ${parts.day} ${parts.month} ${parts.weekday}`;
-        setExpression(newExpr);
-
-        // Parse to human readable
-        const parseExpr = async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
             try {
-                const response = await utilAPI.parseCron(newExpr);
-                if (response.success) {
-                    setHumanReadable(response.data.human);
-                }
-            } catch {
-                setHumanReadable('Custom schedule');
+                const response = await utilAPI.parseCron(expression, controller.signal);
+                setPreview({ human: response.data.human, valid: true });
+            } catch (err) {
+                if (controller.signal.aborted) return;
+                setPreview({ human: err.response?.data?.error || 'Invalid schedule', valid: false });
             }
+        }, 200);
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
         };
-        parseExpr();
-    }, [parts]);
+    }, [expression]);
 
-    const handlePartChange = (part, value) => {
-        setParts(prev => ({ ...prev, [part]: value }));
-    };
+    const handlePartChange = (part, value) => setParts((prev) => ({ ...prev, [part]: value }));
 
-    const handlePresetSelect = (preset) => {
-        setExpression(preset.expression);
-        const exprParts = preset.expression.split(' ');
-        setParts({
-            minute: exprParts[0],
-            hour: exprParts[1],
-            day: exprParts[2],
-            month: exprParts[3],
-            weekday: exprParts[4]
-        });
-    };
+    const handlePresetSelect = (preset) => setParts(splitExpression(preset.expression));
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal wizard-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal wizard-modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2>
                         <Clock size={20} />
                         Schedule Builder
                     </h2>
-                    <button className="btn btn-ghost btn-icon" onClick={onClose}>
+                    <button type="button" className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close">
                         <X size={20} />
                     </button>
                 </div>
@@ -140,12 +142,14 @@ export default function PeriodWizard({ initialExpression, onSelect, onClose }) {
                     <div className="wizard-tabs">
                         <button
                             className={`wizard-tab ${mode === 'presets' ? 'active' : ''}`}
+                            type="button"
                             onClick={() => setMode('presets')}
                         >
                             Quick Presets
                         </button>
                         <button
                             className={`wizard-tab ${mode === 'custom' ? 'active' : ''}`}
+                            type="button"
                             onClick={() => setMode('custom')}
                         >
                             Custom Builder
@@ -157,6 +161,7 @@ export default function PeriodWizard({ initialExpression, onSelect, onClose }) {
                             {PRESETS.map((preset, index) => (
                                 <button
                                     key={index}
+                                    type="button"
                                     className={`preset-btn ${expression === preset.expression ? 'active' : ''}`}
                                     onClick={() => handlePresetSelect(preset)}
                                 >
@@ -167,65 +172,11 @@ export default function PeriodWizard({ initialExpression, onSelect, onClose }) {
                         </div>
                     ) : (
                         <div className="custom-builder">
-                            <div className="builder-row">
-                                <label>Minute</label>
-                                <select
-                                    value={parts.minute}
-                                    onChange={e => handlePartChange('minute', e.target.value)}
-                                >
-                                    {MINUTES.map(opt => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="builder-row">
-                                <label>Hour</label>
-                                <select
-                                    value={parts.hour}
-                                    onChange={e => handlePartChange('hour', e.target.value)}
-                                >
-                                    {HOURS.map(opt => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="builder-row">
-                                <label>Day of Month</label>
-                                <select
-                                    value={parts.day}
-                                    onChange={e => handlePartChange('day', e.target.value)}
-                                >
-                                    {DAYS.map(opt => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="builder-row">
-                                <label>Month</label>
-                                <select
-                                    value={parts.month}
-                                    onChange={e => handlePartChange('month', e.target.value)}
-                                >
-                                    {MONTHS.map(opt => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="builder-row">
-                                <label>Day of Week</label>
-                                <select
-                                    value={parts.weekday}
-                                    onChange={e => handlePartChange('weekday', e.target.value)}
-                                >
-                                    {WEEKDAYS.map(opt => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            <PartSelect label="Minute" options={MINUTES} value={parts.minute} onChange={(v) => handlePartChange('minute', v)} />
+                            <PartSelect label="Hour" options={HOURS} value={parts.hour} onChange={(v) => handlePartChange('hour', v)} />
+                            <PartSelect label="Day of Month" options={DAYS} value={parts.day} onChange={(v) => handlePartChange('day', v)} />
+                            <PartSelect label="Month" options={MONTHS} value={parts.month} onChange={(v) => handlePartChange('month', v)} />
+                            <PartSelect label="Day of Week" options={WEEKDAYS} value={parts.weekday} onChange={(v) => handlePartChange('weekday', v)} />
                         </div>
                     )}
 
@@ -235,16 +186,16 @@ export default function PeriodWizard({ initialExpression, onSelect, onClose }) {
                         </div>
                         <div className="preview-human">
                             <Calendar size={16} />
-                            <span>{humanReadable}</span>
+                            <span className={preview.valid ? '' : 'text-error'}>{preview.human}</span>
                         </div>
                     </div>
                 </div>
 
                 <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onClose}>
+                    <button type="button" className="btn btn-secondary" onClick={onClose}>
                         Cancel
                     </button>
-                    <button className="btn btn-primary" onClick={() => onSelect(expression)}>
+                    <button type="button" className="btn btn-primary" onClick={() => onSelect(expression)} disabled={!preview.valid}>
                         Apply Schedule
                     </button>
                 </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Clock, User, Lock, AlertCircle } from 'lucide-react';
-import { authAPI } from '../services/api';
+import { authAPI, errorMessage } from '../services/api';
 import './Login.css';
 
 export default function Login({ onLogin }) {
@@ -27,7 +27,7 @@ export default function Login({ onLogin }) {
                 setError(response.error || 'Login failed');
             }
         } catch (err) {
-            setError(err.response?.data?.error || 'Login failed. Please try again.');
+            setError(errorMessage(err, 'Login failed. Please try again.'));
         } finally {
             setLoading(false);
         }
@@ -46,18 +46,20 @@ export default function Login({ onLogin }) {
 
                 <form onSubmit={handleSubmit} className="login-form">
                     {error && (
-                        <div className="login-error">
+                        <div className="login-error" role="alert">
                             <AlertCircle size={16} />
                             <span>{error}</span>
                         </div>
                     )}
 
                     <div className="form-group">
-                        <label className="form-label">Username</label>
+                        <label className="form-label" htmlFor="username">Username</label>
                         <div className="input-with-icon">
                             <User size={18} />
                             <input
+                                id="username"
                                 type="text"
+                                autoComplete="username"
                                 value={username}
                                 onChange={e => setUsername(e.target.value)}
                                 placeholder="Enter username"
@@ -67,11 +69,13 @@ export default function Login({ onLogin }) {
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label">Password</label>
+                        <label className="form-label" htmlFor="password">Password</label>
                         <div className="input-with-icon">
                             <Lock size={18} />
                             <input
+                                id="password"
                                 type="password"
+                                autoComplete="current-password"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 placeholder="Enter password"
@@ -95,9 +99,13 @@ export default function Login({ onLogin }) {
                     </button>
                 </form>
 
-                <div className="login-footer">
-                    <p>Default credentials: <code>admin</code> / <code>admin123</code></p>
-                </div>
+                {import.meta.env.DEV && (
+                    <div className="login-footer">
+                        <p>
+                            Development default: <code>admin</code> / <code>admin123</code> (when ADMIN_PASSWORD is not set)
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
     );

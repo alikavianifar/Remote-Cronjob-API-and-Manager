@@ -1,107 +1,82 @@
-// Input validation schemas using Zod
 import { z } from 'zod';
+import { validateExpression } from '../lib/cron.js';
+import { badRequest } from '../lib/errors.js';
 
-// Cron expression validation regex (5 fields)
-const cronRegex = /^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|[0-6]|\*\/[0-6])$/;
+// Control characters (except tab) would break the crontab's line-based format.
+const CONTROL_CHARS = /[\u0000-\u0008\u000a-\u001f\u007f]/;
+// Descriptions are never written to the crontab, so line breaks are fine there.
+const DESCRIPTION_FORBIDDEN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 
-/**
- * Login schema
- */
+const name = z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(100, 'Name must be at most 100 characters')
+    .refine((v) => !CONTROL_CHARS.test(v), 'Name must not contain control characters or line breaks');
+
+const command = z
+    .string()
+    .trim()
+    .min(1, 'Command is required')
+    .max(2000, 'Command must be at most 2000 characters')
+    .refine((v) => !CONTROL_CHARS.test(v), 'Command must be a single line without control characters');
+
+const expression = z
+    .string()
+    .trim()
+    .min(1, 'Schedule expression is required')
+    .max(100, 'Schedule expression is too long')
+    .superRefine((value, ctx) => {
+        const result = validateExpression(value);
+        if (!result.valid) ctx.addIssue({ code: 'custom', message: result.error });
+    })
+    .transform((value) => value.split(/\s+/).join(' '));
+
+const description = z
+    .string()
+    .max(1000, 'Description must be at most 1000 characters')
+    .refine((v) => !DESCRIPTION_FORBIDDEN.test(v), 'Description contains invalid control characters');
+
 export const loginSchema = z.object({
-    username: z.string()
-        .min(3, 'Username must be at least 3 characters')
-        .max(50, 'Username must be at most 50 characters'),
-    password: z.string()
-        .min(6, 'Password must be at least 6 characters')
-        .max(100, 'Password must be at most 100 characters')
+    username: z.string().min(1, 'Username is required').max(64),
+    password: z.string().min(1, 'Password is required').max(256)
 });
 
-/**
- * Create job schema
- */
 export const createJobSchema = z.object({
-    name: z.string()
-        .min(1, 'Job name is required')
-        .max(100, 'Job name must be at most 100 characters'),
-    expression: z.string()
-        .min(9, 'Expression must be at least 9 characters')
-        .max(50, 'Expression must be at most 50 characters')
-        .refine(val => {
-            // More lenient validation - just check 5 fields
-            const parts = val.trim().split(/\s+/);
-            return parts.length === 5;
-        }, 'Invalid cron expression format'),
-    command: z.string()
-        .min(1, 'Command is required')
-        .max(1000, 'Command must be at most 1000 characters'),
-    description: z.string()
-        .max(500, 'Description must be at most 500 characters')
-        .optional()
-        .default('')
+    name,
+    expression,
+    command,
+    description: description.optional()
 });
 
-/**
- * Update job schema (all fields optional)
- */
-export const updateJobSchema = z.object({
-    name: z.string()
-        .min(1, 'Job name is required')
-        .max(100, 'Job name must be at most 100 characters')
-        .optional(),
-    expression: z.string()
-        .min(9, 'Expression must be at least 9 characters')
-        .max(50, 'Expression must be at most 50 characters')
-        .refine(val => {
-            const parts = val.trim().split(/\s+/);
-            return parts.length === 5;
-        }, 'Invalid cron expression format')
-        .optional(),
-    command: z.string()
-        .min(1, 'Command is required')
-        .max(1000, 'Command must be at most 1000 characters')
-        .optional(),
-    description: z.string()
-        .max(500, 'Description must be at most 500 characters')
-        .optional()
+export const updateJobSchema = z
+    .object({
+        name: name.optional(),
+        expression: expression.optional(),
+        command: command.optional(),
+        description: description.optional()
+    })
+    .refine((value) => Object.values(value).some((v) => v !== undefined), 'Provide at least one field to update');
+
+export const cronParseSchema = z.object({ expression: z.string().max(100) });
+
+export const logsQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    offset: z.coerce.number().int().min(0).default(0)
 });
 
-/**
- * Cron parse schema
- */
-export const cronParseSchema = z.object({
-    expression: z.string()
-        .min(9, 'Expression is required')
-        .max(50, 'Expression must be at most 50 characters')
-});
-
-/**
- * Validation middleware factory
- */
-export const validate = (schema) => (req, res, next) => {
-    try {
-        const result = schema.safeParse(req.body);
-
+/** Express middleware factory: validates and replaces `req[source]` with the parsed value. */
+export function validate(schema, source = 'body') {
+    return (req, _res, next) => {
+        const result = schema.safeParse(req[source] ?? {});
         if (!result.success) {
-            const errors = result.error.errors.map(err => ({
-                field: err.path.join('.'),
-                message: err.message
+            const details = result.error.issues.map((issue) => ({
+                field: issue.path.join('.') || source,
+                message: issue.message
             }));
-
-            return res.status(400).json({
-                success: false,
-                error: 'Validation failed',
-                details: errors
-            });
+            return next(badRequest('Validation failed', details));
         }
-
-        // Replace body with parsed/transformed data
-        req.body = result.data;
+        req[source] = result.data;
         next();
-    } catch (error) {
-        return res.status(400).json({
-            success: false,
-            error: 'Validation error',
-            message: error.message
-        });
-    }
-};
+    };
+}

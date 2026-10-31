@@ -1,46 +1,27 @@
-// Global error handler middleware
-import logger from '../services/logger.js';
+import { AppError } from '../lib/errors.js';
 
-/**
- * 404 Not Found handler
- */
-export const notFoundHandler = (req, res, next) => {
-    res.status(404).json({
-        success: false,
-        error: 'Not Found',
-        message: `Cannot ${req.method} ${req.originalUrl}`
-    });
-};
+export const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-/**
- * Global error handler
- */
-export const errorHandler = (err, req, res, next) => {
-    // Log the error
-    logger.error('Unhandled error', {
-        error: err.message,
-        stack: err.stack,
-        path: req.path,
-        method: req.method
-    });
+export function notFoundHandler(_req, _res, next) {
+    next(new AppError(404, 'Route not found'));
+}
 
-    // Determine status code
-    const statusCode = err.statusCode || err.status || 500;
+export function createErrorHandler(logger) {
+    // eslint-disable-next-line no-unused-vars
+    return (err, req, res, _next) => {
+        if (err instanceof AppError) {
+            const body = { success: false, error: err.message };
+            if (err.details) body.details = err.details;
+            return res.status(err.status).json(body);
+        }
+        if (err.type === 'entity.parse.failed') {
+            return res.status(400).json({ success: false, error: 'Request body is not valid JSON' });
+        }
+        if (err.type === 'entity.too.large') {
+            return res.status(413).json({ success: false, error: 'Request body is too large' });
+        }
 
-    // Send error response
-    res.status(statusCode).json({
-        success: false,
-        error: statusCode === 500 ? 'Internal Server Error' : err.message,
-        ...(process.env.NODE_ENV === 'development' && {
-            stack: err.stack,
-            details: err.details
-        })
-    });
-};
-
-/**
- * Async handler wrapper to catch async errors
- */
-export const asyncHandler = (fn) => (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-};
+        logger.error(`${req.method} ${req.originalUrl} failed`, err);
+        res.status(500).json({ success: false, error: 'Internal Server Error' });
+    };
+}

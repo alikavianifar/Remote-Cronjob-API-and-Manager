@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { X, Wand2, Calendar } from 'lucide-react';
 import PeriodWizard from './PeriodWizard';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { utilAPI } from '../services/api';
 import './JobForm.css';
+
+const noop = () => {};
 
 export default function JobForm({ job, onSave, onClose }) {
     const [formData, setFormData] = useState({
@@ -11,7 +14,7 @@ export default function JobForm({ job, onSave, onClose }) {
         command: '',
         description: ''
     });
-    const [expressionHuman, setExpressionHuman] = useState('');
+    const [preview, setPreview] = useState({ state: 'idle' });
     const [errors, setErrors] = useState({});
     const [showWizard, setShowWizard] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -27,23 +30,32 @@ export default function JobForm({ job, onSave, onClose }) {
         }
     }, [job]);
 
+    // Ask the server to describe the schedule, but only after typing pauses, and ignore stale answers.
     useEffect(() => {
-        // Parse expression when it changes
-        const parseExpression = async () => {
-            try {
-                const response = await utilAPI.parseCron(formData.expression);
-                if (response.success) {
-                    setExpressionHuman(response.data.human);
-                }
-            } catch {
-                setExpressionHuman('Invalid expression');
-            }
-        };
-
-        if (formData.expression) {
-            parseExpression();
+        const expression = formData.expression.trim();
+        if (!expression) {
+            setPreview({ state: 'idle' });
+            return undefined;
         }
+
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
+            try {
+                const response = await utilAPI.parseCron(expression, controller.signal);
+                setPreview({ state: 'ok', human: response.data.human, next: response.data.nextRuns[0] });
+            } catch (err) {
+                if (controller.signal.aborted) return;
+                setPreview({ state: 'invalid', message: err.response?.data?.error || 'Invalid expression' });
+            }
+        }, 300);
+
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
     }, [formData.expression]);
+
+    useEscapeKey(showWizard ? noop : onClose);
 
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -78,15 +90,18 @@ export default function JobForm({ job, onSave, onClose }) {
 
         setSaving(true);
         try {
-            const result = await onSave(formData);
-            if (!result.success) {
-                if (result.details) {
-                    const newErrors = {};
-                    result.details.forEach(d => {
-                        newErrors[d.field] = d.message;
-                    });
-                    setErrors(newErrors);
-                }
+            const result = await onSave({
+                name: formData.name.trim(),
+                expression: formData.expression.trim(),
+                command: formData.command.trim(),
+                description: formData.description
+            });
+            if (!result.success && result.details) {
+                const newErrors = {};
+                result.details.forEach((d) => {
+                    newErrors[d.field] = d.message;
+                });
+                setErrors(newErrors);
             }
         } finally {
             setSaving(false);
@@ -100,10 +115,10 @@ export default function JobForm({ job, onSave, onClose }) {
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal job-form-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal job-form-modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2>{job ? 'Edit Job' : 'Create New Job'}</h2>
-                    <button className="btn btn-ghost btn-icon" onClick={onClose}>
+                    <button type="button" className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close">
                         <X size={20} />
                     </button>
                 </div>
@@ -111,9 +126,12 @@ export default function JobForm({ job, onSave, onClose }) {
                 <form onSubmit={handleSubmit}>
                     <div className="modal-body">
                         <div className="form-group">
-                            <label className="form-label">Job Name *</label>
+                            <label className="form-label" htmlFor="job-name">Job Name *</label>
                             <input
+                                id="job-name"
                                 type="text"
+                                autoFocus
+                                maxLength={100}
                                 value={formData.name}
                                 onChange={e => handleChange('name', e.target.value)}
                                 placeholder="e.g., Backup Database"
@@ -122,21 +140,23 @@ export default function JobForm({ job, onSave, onClose }) {
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">Command *</label>
+                            <label className="form-label" htmlFor="job-command">Command *</label>
                             <input
+                                id="job-command"
                                 type="text"
+                                maxLength={2000}
                                 value={formData.command}
                                 onChange={e => handleChange('command', e.target.value)}
                                 placeholder="e.g., /opt/scripts/backup.sh"
                                 className="font-mono"
                             />
                             {errors.command && <span className="form-error">{errors.command}</span>}
-                            <span className="form-hint">The shell command to execute</span>
+                            <span className="form-hint">A single-line shell command, run with /bin/sh</span>
                         </div>
 
                         <div className="form-group">
                             <div className="form-label-row">
-                                <label className="form-label">Schedule *</label>
+                                <label className="form-label" htmlFor="job-expression">Schedule *</label>
                                 <button
                                     type="button"
                                     className="btn btn-ghost wizard-btn"
@@ -147,6 +167,7 @@ export default function JobForm({ job, onSave, onClose }) {
                                 </button>
                             </div>
                             <input
+                                id="job-expression"
                                 type="text"
                                 value={formData.expression}
                                 onChange={e => handleChange('expression', e.target.value)}
@@ -154,17 +175,25 @@ export default function JobForm({ job, onSave, onClose }) {
                                 className="font-mono"
                             />
                             {errors.expression && <span className="form-error">{errors.expression}</span>}
-                            {expressionHuman && (
+                            {preview.state === 'ok' && (
                                 <div className="expression-preview">
                                     <Calendar size={14} />
-                                    <span>{expressionHuman}</span>
+                                    <span>
+                                        {preview.human}
+                                        {preview.next && ` - next run ${new Date(preview.next).toLocaleString()}`}
+                                    </span>
                                 </div>
+                            )}
+                            {preview.state === 'invalid' && !errors.expression && (
+                                <span className="form-error">{preview.message}</span>
                             )}
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">Description</label>
+                            <label className="form-label" htmlFor="job-description">Description</label>
                             <textarea
+                                id="job-description"
+                                maxLength={1000}
                                 value={formData.description}
                                 onChange={e => handleChange('description', e.target.value)}
                                 placeholder="Optional description of what this job does"

@@ -1,92 +1,29 @@
-// JWT Authentication middleware
 import jwt from 'jsonwebtoken';
-import config from '../config/index.js';
-import logger from '../services/logger.js';
+import { AppError } from '../lib/errors.js';
 
-/**
- * Middleware to verify JWT token
- */
-export const authenticate = (req, res, next) => {
-    try {
-        // Get token from header
-        const authHeader = req.headers.authorization;
+export function signToken(config, user) {
+    return jwt.sign({ sub: user.id, username: user.username }, config.jwtSecret, {
+        algorithm: 'HS256',
+        expiresIn: config.jwtExpiresIn
+    });
+}
 
-        if (!authHeader) {
-            return res.status(401).json({
-                success: false,
-                error: 'No authorization header provided'
-            });
+/** Requires a valid `Authorization: Bearer <token>` header belonging to an existing user. */
+export function createAuthenticate({ config, store }) {
+    return (req, _res, next) => {
+        const header = req.headers.authorization || '';
+        const [scheme, token] = header.split(' ');
+        if (scheme !== 'Bearer' || !token) return next(new AppError(401, 'Authentication required'));
+
+        try {
+            const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
+            const user = store.getUserById(payload.sub);
+            if (!user) return next(new AppError(401, 'Invalid token'));
+            req.user = { id: user.id, username: user.username };
+            next();
+        } catch (err) {
+            const message = err.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token';
+            next(new AppError(401, message));
         }
-
-        // Check Bearer format
-        if (!authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({
-                success: false,
-                error: 'Invalid authorization format. Use: Bearer <token>'
-            });
-        }
-
-        const token = authHeader.slice(7);
-
-        // Verify token
-        const decoded = jwt.verify(token, config.jwtSecret);
-
-        // Attach user info to request
-        req.user = {
-            id: decoded.id,
-            username: decoded.username,
-            role: decoded.role
-        };
-
-        next();
-    } catch (error) {
-        logger.warn('Authentication failed', { error: error.message });
-
-        if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({
-                success: false,
-                error: 'Token has expired'
-            });
-        }
-
-        if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({
-                success: false,
-                error: 'Invalid token'
-            });
-        }
-
-        return res.status(500).json({
-            success: false,
-            error: 'Authentication error'
-        });
-    }
-};
-
-/**
- * Middleware to check admin role
- */
-export const requireAdmin = (req, res, next) => {
-    if (req.user?.role !== 'admin') {
-        return res.status(403).json({
-            success: false,
-            error: 'Admin access required'
-        });
-    }
-    next();
-};
-
-/**
- * Generate JWT token for user
- */
-export const generateToken = (user) => {
-    return jwt.sign(
-        {
-            id: user.id,
-            username: user.username,
-            role: user.role
-        },
-        config.jwtSecret,
-        { expiresIn: config.jwtExpiresIn }
-    );
-};
+    };
+}

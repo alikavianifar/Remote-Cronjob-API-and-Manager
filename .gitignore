@@ -1,22 +1,20 @@
 # Dependencies
 node_modules/
-package-lock.json
 
-# Build outputs
+# Build output
 dist/
 build/
 
-# Database
+# Runtime data (users, jobs, logs) - never commit
+src/backend/data/
 *.db
 *.db-journal
-*.db-wal
-*.db-shm
 
 # Logs
 logs/
 *.log
 
-# Environment
+# Environment files (use .env.example as a template)
 .env
 .env.local
 .env.*.local

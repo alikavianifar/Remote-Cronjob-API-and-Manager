@@ -32,6 +32,7 @@ export default function Header({ user, onLogout, onTest }) {
                     className="btn btn-ghost btn-icon"
                     onClick={onLogout}
                     title="Logout"
+                    aria-label="Log out"
                 >
                     <LogOut size={18} />
                 </button>

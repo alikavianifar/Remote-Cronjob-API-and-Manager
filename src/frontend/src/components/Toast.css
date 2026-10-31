@@ -1,6 +1,6 @@
 .toast-container {
     position: fixed;
-    top: var(--space-lg);
+    bottom: var(--space-lg);
     right: var(--space-lg);
     z-index: 1100;
     display: flex;
@@ -35,6 +35,14 @@
 
 .toast-error .toast-icon {
     color: var(--error);
+}
+
+.toast-warning {
+    border-left: 3px solid var(--warning);
+}
+
+.toast-warning .toast-icon {
+    color: var(--warning);
 }
 
 .toast-info {

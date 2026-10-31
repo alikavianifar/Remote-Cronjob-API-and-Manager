@@ -32,3 +32,19 @@
 .delete-modal p {
     color: var(--text-secondary);
 }
+.app-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+    padding: var(--space-md);
+    background: var(--error-bg);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-sm);
+    color: var(--error);
+    font-size: 0.875rem;
+}
+
+.app-error span {
+    flex: 1;
+}

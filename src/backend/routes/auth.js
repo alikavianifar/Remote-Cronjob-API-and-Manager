@@ -1,113 +1,33 @@
-// Authentication routes
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
-import db from '../database/db.js';
-import { generateToken } from '../middleware/auth.js';
-import { validate, loginSchema } from '../utils/validators.js';
-import logger from '../services/logger.js';
-import config from '../config/index.js';
+import { AppError } from '../lib/errors.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
+import { signToken } from '../middleware/auth.js';
+import { verifyCredentials } from '../services/authService.js';
+import { loginSchema, validate } from '../utils/validators.js';
 
-const router = Router();
+export function createAuthRouter({ config, store, authenticate, loginLimiter }) {
+    const router = Router();
 
-// Ensure default admin exists
-function ensureDefaultAdmin() {
-    const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
-    const admin = stmt.get(config.defaultAdmin.username);
+    router.post(
+        '/login',
+        loginLimiter,
+        validate(loginSchema),
+        asyncHandler(async (req, res) => {
+            const user = await verifyCredentials(store, req.body.username, req.body.password);
+            if (!user) throw new AppError(401, 'Invalid username or password');
 
-    if (!admin) {
-        const hash = bcrypt.hashSync(config.defaultAdmin.password, 10);
-        const insertStmt = db.prepare(
-            'INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)'
-        );
-        insertStmt.run(uuidv4(), config.defaultAdmin.username, hash, 'admin');
-        logger.info('Default admin user created');
-    }
+            res.json({
+                success: true,
+                token: signToken(config, user),
+                user: { id: user.id, username: user.username }
+            });
+        })
+    );
+
+    // Tokens are stateless, so logging out only needs to discard the token on the client.
+    router.post('/logout', authenticate, (_req, res) => res.json({ success: true }));
+
+    router.get('/me', authenticate, (req, res) => res.json({ success: true, user: req.user }));
+
+    return router;
 }
-
-// Run on module load
-ensureDefaultAdmin();
-
-/**
- * POST /api/auth/login
- * Login and get JWT token
- */
-router.post('/login', validate(loginSchema), (req, res) => {
-    try {
-        const { username, password } = req.body;
-
-        // Find user
-        const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
-        const user = stmt.get(username);
-
-        if (!user) {
-            logger.warn('Login attempt with unknown user', { username });
-            return res.status(401).json({
-                success: false,
-                error: 'Invalid credentials'
-            });
-        }
-
-        // Verify password
-        const validPassword = bcrypt.compareSync(password, user.password_hash);
-
-        if (!validPassword) {
-            logger.warn('Login attempt with wrong password', { username });
-            return res.status(401).json({
-                success: false,
-                error: 'Invalid credentials'
-            });
-        }
-
-        // Generate token
-        const token = generateToken({
-            id: user.id,
-            username: user.username,
-            role: user.role
-        });
-
-        logger.info('User logged in', { username, role: user.role });
-
-        res.json({
-            success: true,
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                role: user.role
-            },
-            expiresIn: 86400 // 24 hours in seconds
-        });
-    } catch (error) {
-        logger.error('Login error', { error: error.message });
-        res.status(500).json({
-            success: false,
-            error: 'Login failed'
-        });
-    }
-});
-
-/**
- * POST /api/auth/logout
- * Logout (client-side token removal)
- */
-router.post('/logout', (req, res) => {
-    res.json({
-        success: true,
-        message: 'Logged out successfully'
-    });
-});
-
-/**
- * GET /api/auth/me
- * Get current user info (requires auth)
- */
-router.get('/me', (req, res) => {
-    // This would be protected by auth middleware in actual usage
-    res.json({
-        success: true,
-        user: req.user || null
-    });
-});
-
-export default router;

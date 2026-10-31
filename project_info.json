@@ -1,23 +1,23 @@
 {
     "projectName": "Remote Cronjob API & Manager",
     "category": "DevOps Automation",
-    "author": "Student Name",
-    "version": "1.0.0",
-    "description": "A modern REST API and web-based management panel for managing scheduled tasks (Cronjobs) on Linux servers. Provides a secure API layer for crontab operations with a beautiful React dashboard.",
+    "author": "Ali Kaviani Far",
+    "version": "2.0.0",
+    "description": "A REST API and web dashboard for managing cron jobs on Linux servers: create, edit, pause, force-run and inspect jobs without editing the crontab by hand.",
     "features": [
-        "Cron API - Read and modify crontab via REST endpoints",
-        "Dashboard - Visual interface showing job status, schedules, and errors",
-        "Period Wizard - Convert complex cron expressions to human-readable format",
-        "Force Run - Manual execution of jobs before scheduled time",
-        "Log Tracking - Record stdout/stderr output and execution history",
-        "Auto Control - Automatic status monitoring and error detection",
-        "Auto Test - Self-check mechanism for testing functionality"
+        "REST API - create, read, update, delete, pause and force-run cron jobs",
+        "Dashboard - React interface showing job status, schedules and the last result",
+        "Schedule wizard - presets and a custom builder with a plain-language preview and next run time",
+        "Force run - execute a job on demand with a timeout and output limit",
+        "Execution logs - stdout, stderr, exit code and duration of every forced run",
+        "JWT authentication, login rate limiting and a production configuration guard",
+        "Self-test - non-destructive health check of the main components"
     ],
     "requirements": {
-        "os": "Ubuntu 22.04 / Linux",
-        "backend": "Node.js 18+",
-        "frontend": "React 18+ with Vite",
-        "database": "SQLite (for logs)"
+        "os": "Linux (production); Windows or macOS in mock mode for development",
+        "backend": "Node.js 20+",
+        "frontend": "React 18 with Vite 8 (Node.js 20.19+ or 22.12+)",
+        "database": "JSON data file (no database server)"
     },
     "repository": "",
     "license": "MIT"

@@ -1,117 +1,63 @@
 # Usage Guide
 
-## Getting Started
+## Signing in
 
-### 1. First Login
+Open the dashboard (<http://localhost:5173> in development) and sign in with the administrator account. The session lasts as long as the token (24 hours by default) and ends earlier if you click the logout button. If the session expires you are returned to the login page.
 
-1. Open http://localhost:5173 in your browser
-2. Enter the default credentials:
-   - **Username**: admin
-   - **Password**: admin123
-3. Click "Sign In"
+## Creating a job
 
-### 2. Dashboard Overview
+1. Click **+ New Job**.
+2. Fill in:
+   - **Job Name** – a short label.
+   - **Command** – a single-line shell command, for example `/opt/scripts/backup.sh` or `df -h >> /tmp/disk.log`. Pipes, redirects and `&&` work, because the command is run with `/bin/sh -c`, exactly as cron does. Line breaks are not allowed; put multi-line logic in a script.
+   - **Schedule** – a cron expression, or use the wizard. A description of the schedule and its next run time appears under the field while you type.
+   - **Description** – optional notes.
+3. Click **Create Job**. The job is added to the crontab immediately.
 
-After logging in, you'll see the main dashboard with:
+## Schedule wizard
 
-- **Header**: Logo, self-test button, user menu, logout
-- **Jobs List**: All configured cronjobs with their status
+Click **Use Wizard** next to the schedule field.
 
-## Managing Jobs
+- **Quick Presets** – common schedules such as every 5 minutes, daily at 2 AM or monthly.
+- **Custom Builder** – choose each field from a list. If the current expression contains a value the lists do not offer (for example `*/7`), it is shown as "Current (…)" and kept until you change it.
 
-### Creating a New Job
+Click **Apply Schedule** to copy the result into the form. Press **Esc** to close the wizard.
 
-1. Click the **"+ New Job"** button in the top right
-2. Fill in the form:
-   - **Job Name**: A descriptive name (e.g., "Database Backup")
-   - **Command**: The shell command to execute
-   - **Schedule**: Cron expression (use wizard for help)
-   - **Description**: Optional description
-3. Click **"Create Job"**
+## Editing, pausing and deleting
 
-### Using the Period Wizard
+- **Edit** (pencil) – change any field and click **Update Job**.
+- **Pause / Activate** – a paused job stays in the list but does not run; it is kept in the crontab as a commented line.
+- **Delete** (trash) – asks for confirmation, then removes the job, its logs and its crontab entry.
 
-The Period Wizard helps you create cron expressions visually:
+## Force Run
 
-1. In the job form, click **"Use Wizard"**
-2. Choose a mode:
-   - **Quick Presets**: Common schedules (every minute, hourly, daily, etc.)
-   - **Custom Builder**: Build your own schedule with dropdowns
-3. Preview the expression and human-readable description
-4. Click **"Apply Schedule"**
+Click **Force Run** to execute the command now. The button shows a spinner until it finishes, and a notification reports the result:
 
-### Editing a Job
+- green – the command exited with code 0
+- yellow – it exited with a non-zero code or exceeded the time limit (60 seconds by default) and was stopped
 
-1. Find the job in the list
-2. Click the **pencil icon** (✏️)
-3. Modify the fields
-4. Click **"Update Job"**
+Force Run also works for paused jobs.
 
-### Deleting a Job
+## Logs
 
-1. Find the job in the list
-2. Click the **trash icon** (🗑️)
-3. Confirm the deletion
+Click the document icon on a job to see its execution history, newest first. Click an entry to expand stdout and stderr. Use **Load more** for older entries.
 
-### Toggling Job Status
+Only runs started with Force Run are recorded. Runs started by cron itself write nothing to this list; if you need their output, redirect it inside the command (for example `… >> /var/log/job.log 2>&1`).
 
-Jobs can be **active** or **paused**:
+## Self-test
 
-1. Find the job
-2. Click **"Pause"** or **"Activate"** button
-3. Paused jobs won't run automatically
+The **Self-Test** button in the header checks the data store, crontab access, the cron parser, token signing and command execution. It does not create or change jobs.
 
-## Force Running Jobs
+## Status badges
 
-To manually execute a job:
+| Badge | Meaning |
+|-------|---------|
+| Active | The job is in the crontab and will run on schedule |
+| Paused | The job is kept as a comment and will not run |
 
-1. Find the job in the list
-2. Click **"Force Run"** button
-3. Wait for execution to complete
-4. View results in the logs
+The ✓ / ✗ next to **Last run** shows whether the latest forced run exited with 0.
 
-## Viewing Logs
-
-To see execution history:
-
-1. Click the **log icon** (📄) on a job card
-2. See all previous executions
-3. Click an entry to expand and view:
-   - **stdout**: Standard output
-   - **stderr**: Error output
-   - **Exit code**: 0 = success
-   - **Duration**: Execution time
-   - **Trigger**: "schedule" or "manual"
-
-## Running Self-Tests
-
-To verify the system is working:
-
-1. Click **"Self-Test"** button in the header
-2. Wait for tests to complete
-3. See results in the toast notification
-
-## Understanding Job Status
-
-| Status | Color | Meaning |
-|--------|-------|---------|
-| Active | 🟢 Green | Job is scheduled and will run |
-| Paused | 🟡 Yellow | Job won't run until activated |
-| Error | 🔴 Red | Last execution failed |
-
-## Cron Expression Format
-
-```
-┌───────────── minute (0 - 59)
-│ ┌───────────── hour (0 - 23)
-│ │ ┌───────────── day of month (1 - 31)
-│ │ │ ┌───────────── month (1 - 12)
-│ │ │ │ ┌───────────── day of week (0 - 6)
-│ │ │ │ │
-* * * * *
-```
-
-### Common Expressions
+## Cron expression cheat sheet
 
 | Expression | Meaning |
 |------------|---------|
@@ -119,26 +65,20 @@ To verify the system is working:
 | `*/5 * * * *` | Every 5 minutes |
 | `0 * * * *` | Every hour |
 | `0 0 * * *` | Daily at midnight |
-| `0 2 * * *` | Daily at 2 AM |
-| `0 0 * * 0` | Weekly on Sunday |
-| `0 0 1 * *` | Monthly on 1st |
+| `0 2 * * 1-5` | 02:00 on weekdays |
+| `0 0 * * 0` | Weekly, Sunday at midnight |
+| `0 0 1 * *` | Monthly, on the 1st |
 
-## Keyboard Shortcuts
+Times use the server's time zone. See the [API documentation](api-documentation.md#cron-expression-format) for the full syntax.
+
+## Keyboard
 
 | Key | Action |
 |-----|--------|
-| `Esc` | Close modal |
+| `Esc` | Close the open dialog (the wizard first, then the form) |
 
-## Troubleshooting
+## Things to know
 
-### Can't login?
-- Check if backend is running on port 3000
-- Verify credentials (admin/admin123)
-
-### Jobs not showing?
-- Check backend logs for errors
-- Ensure you're authenticated
-
-### Force Run not working?
-- Check if job command is valid
-- Look at logs for error details
+- Jobs are stored in the application's data file, and the crontab is generated from it. Lines in your crontab outside the managed `# BEGIN CRONMGR … # END CRONMGR` block are never touched, but edits inside the block are overwritten.
+- `%` characters in commands are escaped automatically (cron would otherwise treat them as line breaks), so `date +%F` works as written.
+- Commands run as the user that runs the backend service.

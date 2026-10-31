@@ -1,177 +1,72 @@
-import { useState, useEffect, useCallback } from 'react';
-import { jobsAPI } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { errorMessage, jobsAPI } from '../services/api';
 
-/**
- * Custom hook for managing jobs state
- */
+/** Wraps an API call so every action resolves to { success, data?, error?, details? }. */
+async function attempt(call, fallbackMessage) {
+    try {
+        const response = await call();
+        return response.success ? { success: true, data: response.data } : { success: false, error: fallbackMessage };
+    } catch (err) {
+        return { success: false, error: errorMessage(err, fallbackMessage), details: err.response?.data?.details };
+    }
+}
+
+/** Jobs state and the actions that change it. */
 export function useJobs() {
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     const fetchJobs = useCallback(async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const response = await jobsAPI.getAll();
-            if (response.success) {
-                setJobs(response.data);
-            }
-        } catch (err) {
-            setError(err.response?.data?.error || 'Failed to fetch jobs');
-        } finally {
-            setLoading(false);
-        }
+        setLoading(true);
+        setError(null);
+        const result = await attempt(() => jobsAPI.getAll(), 'Failed to load jobs');
+        if (result.success) setJobs(result.data);
+        else setError(result.error);
+        setLoading(false);
     }, []);
 
+    const replaceJob = (updated) => setJobs((prev) => prev.map((job) => (job.id === updated.id ? updated : job)));
+
     const createJob = async (jobData) => {
-        try {
-            const response = await jobsAPI.create(jobData);
-            if (response.success) {
-                setJobs(prev => [...prev, response.data]);
-                return { success: true, data: response.data };
-            }
-            return { success: false, error: 'Failed to create job' };
-        } catch (err) {
-            return {
-                success: false,
-                error: err.response?.data?.error || 'Failed to create job',
-                details: err.response?.data?.details
-            };
-        }
+        const result = await attempt(() => jobsAPI.create(jobData), 'Failed to create job');
+        if (result.success) setJobs((prev) => [...prev, result.data]);
+        return result;
     };
 
     const updateJob = async (id, jobData) => {
-        try {
-            const response = await jobsAPI.update(id, jobData);
-            if (response.success) {
-                setJobs(prev => prev.map(job =>
-                    job.id === id ? { ...job, ...response.data } : job
-                ));
-                return { success: true, data: response.data };
-            }
-            return { success: false, error: 'Failed to update job' };
-        } catch (err) {
-            return {
-                success: false,
-                error: err.response?.data?.error || 'Failed to update job',
-                details: err.response?.data?.details
-            };
-        }
+        const result = await attempt(() => jobsAPI.update(id, jobData), 'Failed to update job');
+        if (result.success) replaceJob(result.data);
+        return result;
     };
 
     const deleteJob = async (id) => {
-        try {
-            const response = await jobsAPI.delete(id);
-            if (response.success) {
-                setJobs(prev => prev.filter(job => job.id !== id));
-                return { success: true };
-            }
-            return { success: false, error: 'Failed to delete job' };
-        } catch (err) {
-            return {
-                success: false,
-                error: err.response?.data?.error || 'Failed to delete job'
-            };
-        }
-    };
-
-    const runJob = async (id) => {
-        try {
-            const response = await jobsAPI.run(id);
-            if (response.success) {
-                // Update job with new last run info
-                setJobs(prev => prev.map(job =>
-                    job.id === id ? {
-                        ...job,
-                        lastRun: response.data.completedAt,
-                        lastExitCode: response.data.exitCode
-                    } : job
-                ));
-                return { success: true, data: response.data };
-            }
-            return { success: false, error: 'Failed to run job' };
-        } catch (err) {
-            return {
-                success: false,
-                error: err.response?.data?.error || 'Failed to run job'
-            };
-        }
+        const result = await attempt(() => jobsAPI.delete(id), 'Failed to delete job');
+        if (result.success) setJobs((prev) => prev.filter((job) => job.id !== id));
+        return result;
     };
 
     const toggleJob = async (id) => {
-        try {
-            const response = await jobsAPI.toggle(id);
-            if (response.success) {
-                setJobs(prev => prev.map(job =>
-                    job.id === id ? { ...job, status: response.data.status } : job
-                ));
-                return { success: true, data: response.data };
-            }
-            return { success: false, error: 'Failed to toggle job' };
-        } catch (err) {
-            return {
-                success: false,
-                error: err.response?.data?.error || 'Failed to toggle job'
-            };
+        const result = await attempt(() => jobsAPI.toggle(id), 'Failed to change job status');
+        if (result.success) replaceJob(result.data);
+        return result;
+    };
+
+    const runJob = async (id) => {
+        const result = await attempt(() => jobsAPI.run(id), 'Failed to run job');
+        if (result.success) {
+            setJobs((prev) =>
+                prev.map((job) =>
+                    job.id === id ? { ...job, lastRun: result.data.completedAt, lastExitCode: result.data.exitCode } : job
+                )
+            );
         }
+        return result;
     };
 
     useEffect(() => {
         fetchJobs();
     }, [fetchJobs]);
 
-    return {
-        jobs,
-        loading,
-        error,
-        fetchJobs,
-        createJob,
-        updateJob,
-        deleteJob,
-        runJob,
-        toggleJob
-    };
-}
-
-/**
- * Custom hook for managing auth state
- */
-export function useAuth() {
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const token = localStorage.getItem('token');
-        const savedUser = localStorage.getItem('user');
-
-        if (token && savedUser) {
-            setIsAuthenticated(true);
-            setUser(JSON.parse(savedUser));
-        }
-        setLoading(false);
-    }, []);
-
-    const login = (token, userData) => {
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
-        setIsAuthenticated(true);
-        setUser(userData);
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setIsAuthenticated(false);
-        setUser(null);
-    };
-
-    return {
-        isAuthenticated,
-        user,
-        loading,
-        login,
-        logout
-    };
+    return { jobs, loading, error, fetchJobs, createJob, updateJob, deleteJob, runJob, toggleJob };
 }

@@ -1,16 +1,18 @@
 # Research Documentation
 
-This directory contains the in-depth research, technical analysis, and design specifications for the Remote Cronjob API & Manager project.
+Background research and design notes written while the project was planned. They describe the reasoning and the options that were considered; the implemented behaviour is documented in the top-level [README](../README.md) and in [`docs/`](../docs).
 
-## Directory Structure
+## Contents
 
-*   [**01-technical-architecture.md**](./01-technical-architecture.md): The core technical report covering Linux internals, Node.js security (safe spawning), Drift Detection, and System Architecture. **Start here.**
-*   [**02-ux-cron-wizard.md**](./02-ux-cron-wizard.md): Design specifications for the Cron Period Wizard UI, including the decision tree logic and JSON configuration schema.
-*   **archive/**: Contains initial research prompts and results (GPT/LLM outputs) that have been superseded by the formal reports above.
+- [`01-technical-architecture.md`](./01-technical-architecture.md): Linux cron internals, Node.js security (safe process spawning), state synchronisation and system architecture.
+- [`02-ux-cron-wizard.md`](./02-ux-cron-wizard.md): design notes for the cron schedule wizard.
+- [`archive/`](./archive): the original research prompt and raw LLM output that the reports above were based on.
 
-## Key Findings Summary
+## How the findings were applied
 
-*   **Security**: Switched from `exec` to `spawn` to prevent Shell Injection.
-*   **Stability**: Implemented "Drift Detection" to sync DB with actual crontab state.
-*   **Performance**: Recommended Server-Sent Events (SSE) for real-time log streaming.
-*   **Market Position**: Positioned as a lightweight, native Crontab manager, unlike heavy alternatives like Rundeck.
+| Finding | In the implementation |
+|---------|----------------------|
+| Use `spawn` with an argument list instead of `exec` to avoid shell injection | Applied: the `crontab` binary is started without a shell and receives the new table on stdin |
+| Keep the application state and the real crontab consistent | Applied differently: the data file is the source of truth, and the crontab's managed block is regenerated from it after each change (no background drift detection) |
+| Stream logs in real time with Server-Sent Events | Not implemented: logs are fetched on demand |
+| Run the API as an unprivileged user | Recommended deployment, see the README's security notes |

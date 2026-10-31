@@ -4,10 +4,10 @@
 
 **Manage Linux cron jobs through a secure REST API and a web dashboard.**
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
-![React](https://img.shields.io/badge/react-18.x-61dafb.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)
+![React](https://img.shields.io/badge/react-18-61dafb.svg)
 
 </div>
 
@@ -15,23 +15,29 @@
 
 ## Overview
 
-Linux `cron` has no built-in API. This project adds one: an Express-based REST API for creating, scheduling, running and monitoring cron jobs, together with a React dashboard that makes the same operations available from the browser.
+Cron has no API. This project adds one: an Express REST API that creates, edits, pauses, deletes and force-runs cron jobs, plus a React dashboard for the same operations.
 
-- **Backend:** Node.js, Express, SQLite, JWT authentication
+- **Backend:** Node.js 20+, Express, JWT authentication, Zod validation
 - **Frontend:** React 18 and Vite
-- **Target platform:** Linux (production). On Windows, the backend can be used for development through a mock mode.
+- **Storage:** a JSON data file – no database server to install
+- **Platform:** Linux with cron for real scheduling; mock mode for development on Windows or macOS
+- **Tests:** 130 automated backend tests (`node:test`, no extra tooling)
+
+The API manages one block inside the service user's crontab. Everything else in that crontab is left exactly as it was.
 
 ## Table of Contents
 
 - [Features](#features)
 - [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Usage](#usage)
-- [API Reference](#api-reference)
-- [Security Notes](#security-notes)
+- [Configuration](#configuration)
+- [How It Works](#how-it-works)
+- [API Overview](#api-overview)
+- [Security](#security)
+- [Limitations](#limitations)
 - [Project Structure](#project-structure)
-- [Self-Test](#self-test)
+- [Testing](#testing)
 - [Technologies](#technologies)
+- [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
 - [Author](#author)
@@ -42,190 +48,146 @@ Linux `cron` has no built-in API. This project adds one: an Express-based REST A
 
 | Feature | Description |
 |---------|-------------|
-| **REST API** | Endpoints for creating, reading, updating and deleting crontab jobs |
-| **Visual dashboard** | React dashboard showing job status, schedules and errors |
-| **Period wizard** | Visual builder that turns cron expressions into readable schedules, with presets and custom options |
-| **Force run** | Execute a job manually before its next scheduled time |
-| **Log tracking** | Stores and displays stdout, stderr and execution history for each job |
-| **JWT authentication** | API access is protected with JSON Web Tokens |
-| **Self-test** | Built-in check of the main components, available as a script and as an API endpoint |
-| **Dark theme** | Dark interface with accent colors |
+| **Full job management** | Create, edit, pause/resume and delete jobs; the crontab is updated on every change |
+| **Safe crontab access** | The `crontab` binary is started without a shell; job text is validated and `%` is escaped |
+| **Schedule wizard** | Presets and a custom builder, with a plain-language description and the next run time |
+| **Force run** | Run any job on demand with a timeout and an output limit |
+| **Execution logs** | stdout, stderr, exit code and duration of each forced run, with pagination |
+| **Authentication** | JWT, login rate limiting, constant-time credential checks |
+| **Production guard** | The server refuses to start in production without a strong secret and admin password |
+| **Self-test** | Non-destructive check of the main components, from the dashboard or the API |
 
 ---
 
 ## Quick Start
 
-### Prerequisites
-
-- Node.js 18.0.0 or later
-- npm 9.0.0 or later
-- Linux for production use, or Windows (mock mode) for development
-
-### Run locally
+**Requirements:** Node.js 20.19+ (or 22.12+), npm 10+, and Linux with cron for real scheduling.
 
 ```bash
-# Clone the repository
 git clone https://github.com/alikavianifar/Remote-Cronjob-API-and-Manager.git
 cd Remote-Cronjob-API-and-Manager
 
-# Start the backend
+# Terminal 1 – API on http://127.0.0.1:3000
 cd src/backend
-npm install
-npm start
+npm ci
+npm run dev
 
-# In a second terminal, start the frontend
+# Terminal 2 – dashboard on http://localhost:5173
 cd src/frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173> in your browser.
-
-**Default login (local development only):**
-
-- Username: `admin`
-- Password: `admin123`
-
-> **Important:** These credentials are intended for local development. Change them, and the JWT signing secret, in the backend configuration before using the service anywhere else. See [Security Notes](#security-notes).
+Open <http://localhost:5173>. While `ADMIN_PASSWORD` is not set, the development login is `admin` / `admin123` and the backend logs a warning. On Windows, `install.bat` and `start.bat` do the same; the backend then runs in mock mode and neither touches the real crontab nor executes commands.
 
 ---
 
-## Installation
+## Configuration
 
-### Backend
+Settings are environment variables; the full list with explanations is in [`src/backend/.env.example`](src/backend/.env.example). The most important ones:
 
-```bash
-cd src/backend
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NODE_ENV` | `development` | `production` enables the startup checks |
+| `JWT_SECRET` | random per start (dev) | **Required in production**, at least 32 characters |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | `admin`, `admin123` (dev) | **Password required in production**, at least 12 characters |
+| `HOST`, `PORT` | `127.0.0.1`, `3000` | Listen address |
+| `CORS_ORIGINS` | `http://localhost:5173,…` | Browser origins allowed to call the API |
+| `DATA_FILE` | `src/backend/data/db.json` | Users, jobs and logs |
+| `CRONMGR_MOCK` | `true` on Windows | Simulate cron and do not run commands |
+| `COMMAND_TIMEOUT_MS` | `60000` | Time limit for Force Run |
 
-# Install dependencies
-npm install
+Production setup (systemd unit, reverse proxy, TLS) is described in the [installation guide](docs/installation.md#production-deployment).
 
-# Development server
-npm run dev
+---
 
-# Production server
-npm start
+## How It Works
+
+```
+Browser ──HTTPS──▶ reverse proxy ──▶ Express API ──▶ JSON data file   (source of truth)
+                                          │
+                                          └─ spawn("crontab", ["-"]) ──▶ user crontab
 ```
 
-The API runs on <http://localhost:3000>.
+1. A job is validated (cron syntax, single-line command, length limits) and saved in the data file.
+2. The managed block of the crontab is regenerated from all stored jobs and written with `crontab -`. If that fails, the saved change is rolled back, so the data file and the crontab never disagree.
+3. Paused jobs are written as `#PAUSED …` comments; lines outside the block are preserved.
 
-### Frontend
+```
+MAILTO=ops@example.com                      ← your own entries stay untouched
+17 3 * * * /usr/local/bin/rotate
 
-```bash
-cd src/frontend
-
-# Install dependencies
-npm install
-
-# Development server
-npm run dev
-
-# Production build
-npm run build
+# BEGIN CRONMGR (managed block - changes made here are overwritten)
+# CRONMGR:3f6c…  Backup database
+0 2 * * * /opt/scripts/backup.sh
+# CRONMGR:9a1d…  Disk report
+#PAUSED 0 * * * * df -h >> /tmp/disk.log
+# END CRONMGR
 ```
 
-The development server runs on <http://localhost:5173>.
+Cron itself runs the scheduled commands, so jobs keep running when the API is stopped.
 
 ---
 
-## Usage
+## API Overview
 
-### Sign in
-
-1. Open <http://localhost:5173>.
-2. Enter your credentials.
-3. You are redirected to the dashboard.
-
-### Create a job
-
-1. Click **+ New Job**.
-2. Fill in the job details:
-   - **Name:** a descriptive name
-   - **Command:** the shell command to execute
-   - **Schedule:** a cron expression (use the wizard if you need help)
-   - **Description:** optional
-3. Click **Create Job**.
-
-### Use the period wizard
-
-1. In the job form, click **Use Wizard**.
-2. Choose a preset or build a custom schedule.
-3. Check the generated expression and click **Apply**.
-
-### Force-run a job
-
-1. Find the job in the list.
-2. Click **Force Run**.
-3. Open the job's logs to see the result.
-
-### View logs
-
-1. Click the log icon on a job card.
-2. Expand an entry to see its stdout and stderr output.
-
----
-
-## API Reference
-
-All job and utility endpoints expect a JWT in the `Authorization: Bearer <token>` header, except the login and health-check routes.
-
-### Authentication
+All endpoints except `GET /api/health` and `POST /api/auth/login` require `Authorization: Bearer <token>`. Details, request/response examples and status codes are in the [API documentation](docs/api-documentation.md).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/login` | Log in and receive a JWT |
-
-### Jobs
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/jobs` | List all jobs |
-| GET | `/api/jobs/:id` | Get a job |
+| POST | `/api/auth/login` | Log in, receive a JWT |
+| GET | `/api/auth/me` | Current user |
+| GET | `/api/jobs` | List jobs |
 | POST | `/api/jobs` | Create a job |
-| PUT | `/api/jobs/:id` | Update a job |
-| DELETE | `/api/jobs/:id` | Delete a job |
-| POST | `/api/jobs/:id/run` | Run a job immediately |
-| POST | `/api/jobs/:id/toggle` | Pause or resume a job |
-| GET | `/api/jobs/:id/logs` | Get a job's execution logs |
-
-### Utility
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/test` | Run the self-test |
-| POST | `/api/cron/parse` | Parse a cron expression |
-
-### Example requests
+| GET / PUT / DELETE | `/api/jobs/:id` | Read, update, delete a job |
+| POST | `/api/jobs/:id/toggle` | Pause or resume |
+| POST | `/api/jobs/:id/run` | Run now and record the result |
+| GET | `/api/jobs/:id/logs` | Execution logs (paginated) |
+| POST | `/api/cron/parse` | Describe an expression and list upcoming runs |
+| GET | `/api/test` | Self-test |
+| GET | `/api/health` | Health check (public) |
 
 ```bash
-# Log in
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"your-password"}' | jq -r .token)
 
-# Create a job (replace YOUR_TOKEN with the token returned by the login request)
 curl -X POST http://localhost:3000/api/jobs \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "name": "Backup Database",
-    "expression": "0 2 * * *",
-    "command": "/opt/scripts/backup.sh",
-    "description": "Daily database backup"
-  }'
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"Backup database","expression":"0 2 * * *","command":"/opt/scripts/backup.sh"}'
 ```
 
 ---
 
-## Security Notes
+## Security
 
-This service executes shell commands on the host it runs on. Treat it accordingly:
+This service runs shell commands on the machine it is installed on – that is its purpose. Anyone who can sign in can run arbitrary commands as the service user.
 
-- Commands run with the privileges of the user that runs the backend. Use a dedicated, least-privileged account.
-- Change the default credentials and the JWT signing secret before any use outside local development.
-- Do not expose the API directly to the internet. Place it behind a reverse proxy with HTTPS and restrict access to trusted networks.
-- Review the commands stored in jobs regularly. Anyone who can create a job can run arbitrary commands.
+What the project does:
+
+- no shell is involved in reading or writing the crontab; line breaks and control characters are rejected so a job cannot add extra cron lines
+- all endpoints except the health check require a token (HS256 only, expiry enforced); login is rate-limited and does not reveal whether a username exists
+- production mode refuses weak or missing secrets; no secret or password is stored in the repository
+- the data file is created with owner-only permissions; Force Run children do not inherit `JWT_SECRET` or `ADMIN_PASSWORD`
+- Helmet security headers, a CORS allow-list, a 100 KB body limit, command timeout and output limit
+
+What you should do:
+
+- run the service as a dedicated unprivileged user, never as root
+- keep it on `127.0.0.1` behind a reverse proxy with TLS, and restrict access to trusted networks
+- set `TRUST_PROXY=true` only when a proxy is actually in front of it
+
+The dashboard keeps its token in `localStorage`, as most single-page apps do; serve it only over HTTPS and from your own origin.
+
+---
+
+## Limitations
+
+- Logs are recorded for Force Run only. Executions started by cron itself are not captured; redirect their output inside the command if you need it.
+- The data file is the source of truth. Edits made by hand *inside* the managed block are overwritten on the next change (lines outside it are never touched).
+- One administrator account; no roles or multi-user support.
+- State and rate limits are held by a single process; run one instance.
+- Schedules use standard 5-field cron syntax in the server's time zone. `@daily`-style shortcuts, `L`/`W`/`#` and seconds are not supported.
 
 ---
 
@@ -233,92 +195,67 @@ This service executes shell commands on the host it runs on. Treat it accordingl
 
 ```
 Remote-Cronjob-API-and-Manager/
-├── specs/                  # Requirements and analysis
-│   ├── technical-specs.md
-│   ├── api-endpoints.md
-│   └── ui-requirements.md
 ├── src/
-│   ├── backend/            # Node.js + Express API
-│   │   ├── config/         # Configuration
-│   │   ├── database/       # SQLite setup
-│   │   ├── middleware/     # Authentication and error handling
-│   │   ├── routes/         # API routes
-│   │   ├── services/       # Business logic
-│   │   ├── test/           # Self-test scripts
-│   │   └── server.js       # Entry point
-│   └── frontend/           # React + Vite application
-│       ├── src/
-│       │   ├── components/ # React components
-│       │   ├── hooks/      # Custom hooks
-│       │   ├── services/   # API client
-│       │   └── styles/     # CSS
-│       └── index.html
-├── docs/                   # Documentation
-├── project_info.json       # Project metadata
-└── README.md
+│   ├── backend/
+│   │   ├── config/        # Environment configuration and production checks
+│   │   ├── lib/           # Cron parser, logger, error types
+│   │   ├── middleware/    # Authentication, rate limiting, error handling
+│   │   ├── routes/        # auth, jobs, utilities
+│   │   ├── services/      # Jobs, crontab driver, command runner, auth
+│   │   ├── store/         # Atomic JSON data store
+│   │   ├── utils/         # Request validation schemas
+│   │   ├── test/          # Test suite (node:test)
+│   │   ├── testkit/       # Test helpers
+│   │   ├── app.js         # Express app factory
+│   │   └── server.js      # Entry point
+│   └── frontend/
+│       └── src/           # components, context, hooks, services, styles
+├── docs/                  # API, installation and usage documentation
+├── specs/                 # Original requirements and design specifications
+├── researchs/             # Research notes behind the design
+├── .github/workflows/     # CI
+└── project_info.json
 ```
 
 ---
 
-## Self-Test
-
-The project includes a self-test that checks its main components:
-
-- Database connection
-- Crontab service
-- Cron expression parser
-- Logging system
-- Configuration
-- Authentication
-- API endpoints
-
-Run it from the command line:
+## Testing
 
 ```bash
 cd src/backend
 npm test
 ```
 
-Or call the API endpoint:
+The suite covers the cron parser, crontab block generation (including a stand-in `crontab` executable to verify that no shell syntax is evaluated), the data store, the command runner (exit codes, timeout, output limit, secret isolation), configuration checks, and the full HTTP API: authentication, validation, CRUD, running jobs, logs, rate limiting, CORS, rollback on failure and concurrency. No database or real cron is needed.
 
-```bash
-curl http://localhost:3000/api/test
-```
+Frontend: `cd src/frontend && npm run build`. CI runs both on every push.
 
 ---
 
 ## Technologies
 
-### Backend
+| Area | Stack |
+|------|-------|
+| Backend | Node.js 20+, Express 4, jsonwebtoken, bcryptjs, helmet, cors, Zod, cronstrue |
+| Frontend | React 18, Vite, Axios, Lucide React |
+| Testing | `node:test`, built-in `fetch` |
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Node.js | 18+ | Runtime |
-| Express.js | 4.x | Web framework |
-| SQLite | 3.x | Database |
-| JWT | 9.x | Authentication |
-| Winston | 3.x | Logging |
-| Zod | 3.x | Input validation |
-| cronstrue | 2.x | Human-readable cron descriptions |
+---
 
-### Frontend
+## Documentation
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| React | 18.x | UI framework |
-| Vite | 5.x | Build tool |
-| Axios | 1.x | HTTP client |
-| Lucide React | – | Icons |
+- [Installation guide](docs/installation.md)
+- [Usage guide](docs/usage-guide.md)
+- [API documentation](docs/api-documentation.md)
+- [Technical overview](docs/project_overview.html), [specifications](specs/) and [research notes](researchs/)
 
 ---
 
 ## Contributing
 
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -m "Add your feature"`
-4. Push the branch: `git push origin feature/your-feature`
-5. Open a pull request.
+1. Fork the repository and create a branch: `git checkout -b feature/your-feature`
+2. Make your change and add tests; run `npm test` in `src/backend`
+3. Commit, push and open a pull request
 
 ---
 

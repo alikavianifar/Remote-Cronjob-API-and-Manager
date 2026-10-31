@@ -1,20 +1,19 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
+// The API address used by the dev-server proxy can be overridden, e.g. VITE_API_TARGET=http://127.0.0.1:4000
+const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:3000';
+
 export default defineConfig({
     plugins: [react()],
     server: {
         port: 5173,
         proxy: {
-            '/api': {
-                target: 'http://localhost:3000',
-                changeOrigin: true
-            }
+            '/api': { target: apiTarget, changeOrigin: true }
         }
     },
     build: {
         outDir: 'dist',
         sourcemap: true
     }
-})
+});

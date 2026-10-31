@@ -6,9 +6,7 @@ import {
     Edit,
     Clock,
     Terminal,
-    ChevronRight,
-    FileText,
-    MoreVertical
+    FileText
 } from 'lucide-react';
 import './JobList.css';
 
@@ -23,16 +21,23 @@ export default function JobList({
     onCreateNew
 }) {
     const [runningJobs, setRunningJobs] = useState(new Set());
+    const [togglingJobs, setTogglingJobs] = useState(new Set());
 
-    const handleRun = async (job) => {
-        setRunningJobs(prev => new Set([...prev, job.id]));
-        await onRun(job);
-        setRunningJobs(prev => {
-            const next = new Set(prev);
-            next.delete(job.id);
-            return next;
-        });
+    const withBusy = async (setBusy, job, action) => {
+        setBusy((prev) => new Set(prev).add(job.id));
+        try {
+            await action(job);
+        } finally {
+            setBusy((prev) => {
+                const next = new Set(prev);
+                next.delete(job.id);
+                return next;
+            });
+        }
     };
+
+    const handleRun = (job) => withBusy(setRunningJobs, job, onRun);
+    const handleToggle = (job) => withBusy(setTogglingJobs, job, onToggle);
 
     const formatDate = (dateString) => {
         if (!dateString) return 'Never';
@@ -40,7 +45,7 @@ export default function JobList({
         const now = new Date();
         const diff = now - date;
 
-        if (diff < 60000) return 'Just now';
+        if (diff < 60000) return 'Just now';  // also covers small clock differences between browser and server
         if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
         if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
 
@@ -127,6 +132,7 @@ export default function JobList({
                                         className="btn btn-ghost btn-icon"
                                         onClick={() => onEdit(job)}
                                         title="Edit"
+                                        aria-label="Edit"
                                     >
                                         <Edit size={16} />
                                     </button>
@@ -134,6 +140,7 @@ export default function JobList({
                                         className="btn btn-ghost btn-icon"
                                         onClick={() => onViewLogs(job)}
                                         title="View Logs"
+                                        aria-label="View Logs"
                                     >
                                         <FileText size={16} />
                                     </button>
@@ -141,6 +148,7 @@ export default function JobList({
                                         className="btn btn-ghost btn-icon"
                                         onClick={() => onDelete(job)}
                                         title="Delete"
+                                        aria-label="Delete"
                                     >
                                         <Trash2 size={16} />
                                     </button>
@@ -171,7 +179,9 @@ export default function JobList({
                                         <span className="job-timing-value">
                                             {formatDate(job.lastRun)}
                                             {job.lastExitCode === 0 && <span className="text-success"> ✓</span>}
-                                            {job.lastExitCode > 0 && <span className="text-error"> ✗</span>}
+                                            {job.lastExitCode != null && job.lastExitCode !== 0 && (
+                                                <span className="text-error"> ✗</span>
+                                            )}
                                         </span>
                                     </div>
                                     <div className="job-timing-item">
@@ -183,7 +193,8 @@ export default function JobList({
                                 <div className="job-card-actions">
                                     <button
                                         className={`btn ${job.status === 'active' ? 'btn-secondary' : 'btn-primary'}`}
-                                        onClick={() => onToggle(job)}
+                                        onClick={() => handleToggle(job)}
+                                        disabled={togglingJobs.has(job.id)}
                                         title={job.status === 'active' ? 'Pause' : 'Activate'}
                                     >
                                         {job.status === 'active' ? <Pause size={16} /> : <Play size={16} />}

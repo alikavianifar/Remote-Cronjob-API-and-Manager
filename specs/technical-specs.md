@@ -1,5 +1,7 @@
 # Technical Specifications
 
+> **Note:** This is the original design specification. Where it differs from the implementation (for example it proposes SQLite, while the implementation stores data in a JSON file), the top-level README and `docs/` describe the actual behaviour.
+
 ## 1. System Overview
 
 ### 1.1 Project Description
